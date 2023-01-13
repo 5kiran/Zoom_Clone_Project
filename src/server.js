@@ -1,6 +1,8 @@
 import http from "http";
-import express, { json } from "express";
-import WebSocket from "ws";
+import express from "express";
+import SocketIo from "socket.io";
+import { Socket } from "dgram";
+import { doesNotMatch } from "assert";
 
 const app = express();
 
@@ -18,38 +20,57 @@ app.get("/*", (req, res) => {
 const handleListen = () => console.log(`Server Start http://localhost:3000`);
 
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const io = SocketIo(server);
 
-const sockets = [];
+io.on("connection", (socket) => {
+  socket.onAny((event) => {
+    console.log(`Socket Event ${event}`);
+  });
+  socket.on("enter_room", (roomName, arg) => {
+    socket.join(roomName);
+    arg();
+    socket.to(roomName).emit("welcome")
+  });
 
-wss.on("connection", (socket) => {
-  sockets.push(socket);
-  socket["nickname"] = "Anon";
-  console.log("Connected Browser");
-  socket.on("close", () => {
-    console.log("Close Browser");
-  });
-  socket.on("message", (msg) => {
-    const message = JSON.parse(msg.toString("utf8"));
-    switch (message.type) {
-      case "new_message":
-        sockets.forEach((aSocket) => aSocket.send(`${socket.nickname} : ${message.payload}`));
-        break;
-      case "nickname":
-        socket["nickname"] = message.payload;
-        break;
-    }
-    // if else if 대체로 switch 사용
-    // if (parsed.type === "new_message") {
-    //   sockets.forEach((aSocket) => {
-    //     aSocket.send(parsed.payload);
-    //   });
-    // } else if (parsed.type === "nickname") {
-    //   console.log(parsed.payload)
-    // }
-  });
-  socket.send("hello!!");
+  socket.on("disconnecting", () => {
+    socket.rooms.forEach(room => socket.to(room).emit("bye"))
+  })
+
+  socket.on("new_message", (msg, roomName, done) => {
+    socket.to(roomName).emit("new_message", msg);
+    done();
+  })
 });
+
+// const sockets = [];
+// wss.on("connection", (socket) => {
+//   sockets.push(socket);
+//   socket["nickname"] = "Anon";
+//   console.log("Connected Browser");
+//   socket.on("close", () => {
+//     console.log("Close Browser");
+//   });
+//   socket.on("message", (msg) => {
+//     const message = JSON.parse(msg.toString("utf8"));
+//     switch (message.type) {
+//       case "new_message":
+//         sockets.forEach((aSocket) => aSocket.send(`${socket.nickname} : ${message.payload}`));
+//         break;
+//       case "nickname":
+//         socket["nickname"] = message.payload;
+//         break;
+//     }
+//     // if else if 대체로 switch 사용
+//     // if (parsed.type === "new_message") {
+//     //   sockets.forEach((aSocket) => {
+//     //     aSocket.send(parsed.payload);
+//     //   });
+//     // } else if (parsed.type === "nickname") {
+//     //   console.log(parsed.payload)
+//     // }
+//   });
+//   socket.send("hello!!");
+// });
 
 server.listen(3000, handleListen);
 
